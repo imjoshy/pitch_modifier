@@ -1,106 +1,45 @@
-# https://stackoverflow.com/questions/43963982/python-change-pitch-of-wav-file
+# https://www.thetopsites.net/article/58183597.shtml
 
+# changes pitch
 import wave
 import numpy as np
 
-# change_pitch will change the pitch of the .wav file and produce a new .wav file with output
-# name = name of output file
-# hz = how much to change the pitch of the file by
-def change_pitch(name, hz):
+# see if file exists
+import os.path
+from os import path
 
-    # Open the .wav file
-    original = wave.open(name + '.wav', 'r')
-    # Set parameters for output file
-    par = list(original.getparams())
-    par[3] = 0
-    par = tuple(par)
+def change_pitch(name, change_by):
+    wr = wave.open(name + '.wav', 'r')
     
-    new_name = name + '_modified[' + str(hz) + '].wav'
+    # Set the params for output file
+    par = list(wr.getparams())
+    par[3] = 0 # The number of samples will be set by writeframes
+    par = tuple(par)
+    if path.exists(name + '[' + change_by + ']' + '.wav'):
+        os.remove(name + '[' + change_by + ']' + '.wav')
+    ww = wave.open(name + '[' + change_by + ']' + '.wav', 'w')
+    ww.setparams(par)
 
-    # Create a new .wav file to write to, give same parameters as original file
-    new_file = wave.open(new_name, 'w')
-    new_file.setparams(par)
-
-    # Process speed --
-            # Bigger fr = less reverb
-            # Smaller fr = more reverb
-    fr = 20
-    sz = original.getframerate()//fr
-    c = int(original.getnframes()/sz)
-
-
-    ##### change VARIABLE CONTROLS HOW MUCH TO RAISE/LOWER THE FREQUENCY BY
-    change = hz//fr     # Change frequency based on how much hertz passed as param
+    fr = 60
+    sz = wr.getframerate()//fr  # Read and process 1/fr second at a time.
+    # A larger number for fr means less reverb.
+    c = int(wr.getnframes()/sz)  # count of the whole file
+    shift = int(change_by)//fr  # shifting 100 Hz
 
     for num in range(c):
+        da = np.fromstring(wr.readframes(sz), dtype=np.int16)
+        left, right = da[0::2], da[1::2]  # left and right channel
+        lf, rf = np.fft.rfft(left), np.fft.rfft(right)
+        lf, rf = np.roll(lf, shift), np.roll(rf, shift)
+        lf[0:shift], rf[0:shift] = 0, 0
+        nl, nr = np.fft.irfft(lf), np.fft.irfft(rf)
+        ns = np.column_stack((nl, nr)).ravel().astype(np.int16)
+        ww.writeframes(ns.tostring())
 
-            # Regurgitated code from website above to test why the commented section below doesn't work
-            # -- Results in ValueError: read of closed file
-            # ** EVEN WHEN RUN AS ADMIN (file permissions for administrator are full control)
-            da = np.fromstring(original.readframes(sz), dtype=np.int16)
-            left, right = da[0::2], da[1::2]
-            lf, rf = np.fft.rfft(left), np.fft.rfft(right)
-            lf, rf = np.roll(lf, change), np.roll(rf, change)
-            lf[0:change], rf[0:change] = 0, 0
-            n1, nr = np.fft.irfft(lf), np.fft.irfft(rf)
-            ns = np.column_stack((n1, nr)).ravel().astype(np.int16)
-            new_file.writeframes(ns.tostring())
-
-            original.close()
-            new_file.close()
-            # # Check if MONO (1 channel) or STEREO (2 channels)
-            # channels = original.getnchannels()
-
-            # if channels == 1: # MONO -- no need to split data
-            #     data = np.frombuffer(original.readframes(sz), dtype=np.int16)
-
-            #     # Extract frequencies using Fast Fourier Transform
-            #     frequency = np.fft.rfft(data)
-
-            #     # Roll array -- changes the pitch based on change variable
-            #     frequency = np.roll(frequency, change)
-            #     frequency[0:change] = 0
-
-            #     # Inverse Fast Fourier Transform to convert back to amplitude
-            #     new_frequency = np.fft.irrft(frequency)
-
-            #     # Write to output
-            #     new_file.writeframes(new_frequency)
-
-            #     original.close()
-            #     new_file.close()
-
-            #     return
-            
-            # if channels == 2: # STEREO -- split data for LEFT and RIGHT ears
-            #     data = np.frombuffer(original.readframes(sz), dtype=np.int16)
-                
-            #     # Split into channels
-            #     l, r = data[0::2], data[1::2] # l for left channel; r for right channel
-               
-            #     # Get frequencies for the channels
-            #     lf, rf = np.fft.rfft(l), np.fft.rfft(r) # lf for left frequency, rf for right frequency
-               
-            #     # Roll arrays -- change pitch
-            #     lf, rf = np.roll(lf, change), np.roll(rf, change)
-            #     # lf[0:change], rf[0:change] = 0, 0
-
-            #     # Inverse Fast Fourier Transform to convert back to amplitude
-            #     n1, nr = np.fft.irfft(lf), np.fft.irfft(rf)
-
-            #     # Combine channels
-            #     new_frequency = np.column_stack((n1, nr)).ravel().astype(np.int16)
-
-            #     # Write to output
-            #     new_file.writeframes(new_frequency)
-            #     original.close()
-            #     new_file.close()
-
-            #     return
+    wr.close()
+    ww.close()
 
 if __name__ == '__main__':
-    # RECEIVE INPUT -- for now just type in name of .wav file
-        # Eventually need to allow a click & drag, but that's for later
-    name = input("Name of file (no extensions): ")
-    hz = int(input("Hz to change by: "))
-    change_pitch(name, hz)
+    name = input('Name of file (no extensions): ')
+    change_by = input('How much to change it by (in Hertz): ')
+    change_pitch(name, change_by)
